@@ -172,6 +172,23 @@ type (
 		Region string `json:"region,omitempty" yaml:"region,omitempty"`
 	}
 
+	// HetznerCloud specifies the configuration for a Hetzner Cloud instance.
+	HetznerCloud struct {
+		Account       HetznerCloudAccount `json:"account,omitempty"`
+		Region        string              `json:"region,omitempty" yaml:"region"`
+		Image         string              `json:"image,omitempty" yaml:"image,omitempty"`
+		Size          string              `json:"size,omitempty" yaml:"size,omitempty"`
+		FirewallID    int64               `json:"firewall_id,omitempty" yaml:"firewall_id,omitempty" default:"0"`
+		Tags          []string            `json:"tags,omitempty" yaml:"tags,omitempty"`
+		RootDirectory string              `json:"root_directory,omitempty" yaml:"root_directory"`
+		UserData      string              `json:"user_data,omitempty" yaml:"user_data,omitempty"`
+		UserDataPath  string              `json:"user_data_Path,omitempty" yaml:"user_data_Path,omitempty"`
+	}
+
+	HetznerCloudAccount struct {
+		Token    string `json:"token,omitempty" yaml:"token"`
+	}
+
 	// Google specifies the configuration for a GCP instance.
 	Google struct {
 		Account      GoogleAccount     `json:"account,omitempty"  yaml:"account"`
@@ -278,6 +295,10 @@ type EnvConfig struct {
 
 	DigitalOcean struct {
 		PAT string `envconfig:"DIGITAL_OCEAN_PAT"`
+	}
+
+	HetznerCloud struct {
+		Token string `envconfig:"HETZNER_CLOUD_TOKEN"`
 	}
 
 	Google struct {
@@ -454,6 +475,8 @@ func (s *Instance) populateSpec() error {
 		s.Spec = new(Azure)
 	case string(types.DigitalOcean):
 		s.Spec = new(DigitalOcean)
+	case string(types.HetznerCloud):
+		s.Spec = new(HetznerCloud)
 	case string(types.Google), "gcp":
 		s.Spec = new(Google)
 	case string(types.VMFusion):

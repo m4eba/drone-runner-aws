@@ -29,6 +29,7 @@ const (
 	Azure        = DriverType("azure")
 	DigitalOcean = DriverType("digitalocean")
 	Google       = DriverType("google")
+	HetznerCloud = DriverType("hetznercloud")
 	VMFusion     = DriverType("vmfusion")
 	Noop         = DriverType("noop")
 	Nomad        = DriverType("nomad")

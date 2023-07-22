@@ -15,6 +15,7 @@ import (
 	"github.com/drone-runners/drone-runner-aws/internal/drivers/azure"
 	"github.com/drone-runners/drone-runner-aws/internal/drivers/digitalocean"
 	"github.com/drone-runners/drone-runner-aws/internal/drivers/google"
+	"github.com/drone-runners/drone-runner-aws/internal/drivers/hetznercloud"
 	"github.com/drone-runners/drone-runner-aws/internal/drivers/nomad"
 	"github.com/drone-runners/drone-runner-aws/internal/drivers/noop"
 	"github.com/drone-runners/drone-runner-aws/internal/drivers/vmfusion"
@@ -302,6 +303,32 @@ func ProcessPool(poolFile *config.PoolFile, runnerName string) ([]drivers.Pool, 
 			pool := mapPool(&instance, runnerName)
 			pool.Driver = driver
 			pools = append(pools, pool)
+		case string(types.HetznerCloud):
+			var hetznerConfig, ok = instance.Spec.(*config.HetznerCloud)
+			if !ok {
+				return nil, fmt.Errorf("%s pool parsing failed", instance.Name)
+			}
+			platform, platformErr := hetznercloud.SetPlatformDefaults(&instance.Platform)
+			if platformErr != nil {
+				return nil, platformErr
+			}
+			instance.Platform = *platform
+			driver, err := hetznercloud.New(
+				hetznercloud.WithToken(hetznerConfig.Account.Token),
+				hetznercloud.WithRegion(hetznerConfig.Region),
+				hetznercloud.WithImage(hetznerConfig.Image),
+				hetznercloud.WithSize(hetznerConfig.Size),
+				hetznercloud.WithFirewallID(hetznerConfig.FirewallID),
+				hetznercloud.WithTags(hetznerConfig.Tags),
+				hetznercloud.WithUserData(hetznerConfig.UserData, hetznerConfig.UserDataPath),
+				hetznercloud.WithRootDirectory(hetznerConfig.RootDirectory),
+			)
+			if err != nil {
+				return nil, fmt.Errorf("unable to create %s pool '%s': %v", instance.Type, instance.Name, err)
+			}
+			pool := mapPool(&instance, runnerName)
+			pool.Driver = driver
+			pools = append(pools, pool)
 		default:
 			return nil, fmt.Errorf("unknown instance tip %s", instance.Type)
 		}
@@ -348,6 +375,9 @@ func ConfigPoolFile(path string, conf *config.EnvConfig) (pool *config.PoolFile,
 		case conf.DigitalOcean.PAT != "":
 			logrus.Infoln("in memory pool is using digitalocean")
 			return createDigitalOceanPool(conf.DigitalOcean.PAT, conf.Settings.MinPoolSize, conf.Settings.MaxPoolSize), nil
+		case conf.HetznerCloud.Token != "":
+			logrus.Infoln("in memory pool is using hetznercloud")
+			return createHetznerCloudPool(conf.HetznerCloud.Token, conf.Settings.MinPoolSize, conf.Settings.MaxPoolSize), nil
 		case conf.Google.ProjectID != "":
 			logrus.Infoln("in memory pool is using google")
 			if checkGoogleCredentialsExist(conf.Google.JSONPath) {
@@ -362,7 +392,8 @@ func ConfigPoolFile(path string, conf *config.EnvConfig) (pool *config.PoolFile,
 					"for azure AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID, AZURE_TENANT_ID\n" +
 					"for amazon AWS_ACCESS_KEY_ID and AWS_ACCESS_KEY_SECRET\n" +
 					"for google GOOGLE_PROJECT_ID\n" +
-					"for digitalocean DIGITALOCEAN_PAT")
+					"for digitalocean DIGITALOCEAN_PAT\n" +
+					"for hetznercloud HETZNER_CLOUD_TOKEN")
 		}
 	}
 	pool, err = config.ParseFile(path)
@@ -436,6 +467,31 @@ func createDigitalOceanPool(pat string, minPoolSize, maxPoolSize int) *config.Po
 		Spec: &config.DigitalOcean{
 			Account: config.DigitalOceanAccount{
 				PAT: pat,
+			},
+		},
+	}
+	poolfile := config.PoolFile{
+		Version:   "1",
+		Instances: []config.Instance{instance},
+	}
+
+	return &poolfile
+}
+
+func createHetznerCloudPool(token string, minPoolSize, maxPoolSize int) *config.PoolFile {
+	instance := config.Instance{
+		Name:    DefaultPoolName,
+		Default: true,
+		Type:    string(types.HetznerCloud),
+		Pool:    minPoolSize,
+		Limit:   maxPoolSize,
+		Platform: types.Platform{
+			Arch: oshelp.ArchAMD64,
+			OS:   oshelp.OSLinux,
+		},
+		Spec: &config.HetznerCloud{
+			Account: config.HetznerCloudAccount{
+				Token: token,
 			},
 		},
 	}
