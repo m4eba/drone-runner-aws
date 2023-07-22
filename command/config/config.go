@@ -183,10 +183,10 @@ type (
 		UserData      string              `json:"user_data,omitempty" yaml:"user_data,omitempty"`
 		UserDataPath  string              `json:"user_data_Path,omitempty" yaml:"user_data_Path,omitempty"`
 	}
-	
+
 	HetznerCloudAccount struct {
-		Token    string              `json:"token,omitempty" yaml:"token"`
-		Region   string              `json:"region,omitempty" yaml:"region"`
+		Token  string `json:"token,omitempty" yaml:"token"`
+		Region string `json:"region,omitempty" yaml:"region"`
 	}
 
 	// Google specifies the configuration for a GCP instance.

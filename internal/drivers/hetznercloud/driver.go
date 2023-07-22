@@ -19,15 +19,15 @@ import (
 
 // config is a struct that implements drivers.Pool interface
 type config struct {
-	token             string
-	region            string
-	image             string
-	size              string
-	FirewallID        int64
-	tags              []string
-	userData          string
-	rootDir           string
-	hibernate         bool
+	token      string
+	region     string
+	image      string
+	size       string
+	FirewallID int64
+	tags       []string
+	userData   string
+	rootDir    string
+	hibernate  bool
 }
 
 func New(opts ...Option) (drivers.Driver, error) {
@@ -56,7 +56,6 @@ func (p *config) Create(ctx context.Context, opts *types.InstanceCreateOpts) (in
 	var name = fmt.Sprintf("%s-%s-%s", opts.RunnerName, opts.PoolName, uniuri.NewLen(8)) //nolint:gomnd
 	logr.Infof("hetznercloud: creating instance %s", name)
 
-
 	// convert tags to map
 	tags := make(map[string]string)
 	for _, tag := range p.tags {
@@ -73,7 +72,7 @@ func (p *config) Create(ctx context.Context, opts *types.InstanceCreateOpts) (in
 	}
 
 	client := hcloud.NewClient(hcloud.WithToken(p.token))
-	server, _, err := client.Server.Create(ctx, serverOpts)
+	serverCreate, _, err := client.Server.Create(ctx, serverOpts)
 	if err != nil {
 		logr.WithError(err).
 			Errorln("cannot create instance")
@@ -102,7 +101,7 @@ func (p *config) Create(ctx context.Context, opts *types.InstanceCreateOpts) (in
 		{
 			Type: hcloud.FirewallResourceTypeServer,
 			Server: &hcloud.FirewallResourceServer{
-				ID: server.Server.ID,
+				ID: serverCreate.Server.ID,
 			},
 		},
 	})
@@ -114,7 +113,7 @@ func (p *config) Create(ctx context.Context, opts *types.InstanceCreateOpts) (in
 	logr.Infof("hetznercloud: firewall configured %s", name)
 
 	// initialize the instance
-	return &types.Instance{
+	instance = &types.Instance{
 		Name:         name,
 		Provider:     types.HetznerCloud, // this is driver, though its the old legacy name of provider
 		State:        types.StateCreated,
@@ -123,7 +122,6 @@ func (p *config) Create(ctx context.Context, opts *types.InstanceCreateOpts) (in
 		Image:        p.image,
 		Size:         p.size,
 		Platform:     opts.Platform,
-		Address:      string(server.Server.PublicNet.IPv4.IP),
 		CAKey:        opts.CAKey,
 		CACert:       opts.CACert,
 		TLSKey:       opts.TLSKey,
@@ -132,14 +130,46 @@ func (p *config) Create(ctx context.Context, opts *types.InstanceCreateOpts) (in
 		Updated:      startTime.Unix(),
 		IsHibernated: false,
 		Port:         lehelper.LiteEnginePort,
-	}, nil
+	}
+	// poll the hetznercloud endpoint for server updates and exit when a network address is allocated.
+	interval := time.Duration(0)
+poller:
+	for {
+		select {
+		case <-ctx.Done():
+			logr.WithField("name", instance.Name).
+				Debugln("cannot ascertain network")
+
+			return instance, ctx.Err()
+		case <-time.After(interval):
+			interval = time.Minute
+
+			logr.WithField("name", instance.Name).
+				Debugln("find instance network")
+
+			server, _, err := client.Server.GetByID(ctx, serverCreate.Server.ID)
+			if err != nil {
+				logr.WithError(err).
+					Errorln("cannot find instance")
+				return instance, err
+			}
+			instance.ID = fmt.Sprint(server.ID)
+			instance.Address = server.PublicNet.IPv4.IP.String()
+
+			if instance.Address != "" {
+				break poller
+			}
+		}
+	}
+
+	return instance, err
 }
 
 func (p *config) Start(ctx context.Context, instanceID, poolName string) (ipAddress string, err error) {
 	logr := logger.FromContext(ctx).
 		WithField("id", instanceID).
 		WithField("cloud", types.HetznerCloud)
-	
+
 	id, err := strconv.ParseInt(instanceID, 10, 64)
 	if err != nil {
 		return "", err
@@ -167,7 +197,7 @@ func (p *config) Hibernate(ctx context.Context, instanceID, poolName string) err
 	logr := logger.FromContext(ctx).
 		WithField("id", instanceID).
 		WithField("cloud", types.HetznerCloud)
-	
+
 	id, err := strconv.ParseInt(instanceID, 10, 64)
 	if err != nil {
 		return err
@@ -267,53 +297,56 @@ func getFirewallID(ctx context.Context, client *hcloud.Client) (int64, error) {
 			Port:     hcloud.Ptr("9079"),
 			SourceIPs: []net.IPNet{
 				{
-					IP:   net.IPv4zero,
-					Mask: net.IPv4Mask(0, 0, 0, 0),
+					IP:   net.ParseIP("0.0.0.0"),
+					Mask: net.CIDRMask(0, 32),
 				},
 				{
-					IP:   net.IPv6zero,
-				},
-			},
-		},
-		{
-			Direction:      hcloud.FirewallRuleDirectionOut,
-			Protocol:       hcloud.FirewallRuleProtocolICMP,
-			Port:           hcloud.Ptr("0"),
-			DestinationIPs: []net.IPNet{
-				{
-					IP:   net.IPv4zero,
-					Mask: net.IPv4Mask(0, 0, 0, 0),
-				},
-				{
-					IP:   net.IPv6zero,
+					IP:   net.ParseIP("::"),
+					Mask: net.CIDRMask(0, 128),
 				},
 			},
 		},
 		{
-			Direction:      hcloud.FirewallRuleDirectionOut,
-			Protocol:       hcloud.FirewallRuleProtocolTCP,
-			Port:           hcloud.Ptr("0"),
+			Direction: hcloud.FirewallRuleDirectionOut,
+			Protocol: hcloud.FirewallRuleProtocolICMP,
 			DestinationIPs: []net.IPNet{
 				{
-					IP:   net.IPv4zero,
-					Mask: net.IPv4Mask(0, 0, 0, 0),
+					IP:   net.ParseIP("0.0.0.0"),
+					Mask: net.CIDRMask(0, 32),
 				},
 				{
-					IP:   net.IPv6zero,
+					IP:   net.ParseIP("::"),
+					Mask: net.CIDRMask(0, 128),
 				},
 			},
 		},
 		{
-			Direction:      hcloud.FirewallRuleDirectionOut,
-			Protocol:       hcloud.FirewallRuleProtocolUDP,
-			Port:           hcloud.Ptr("0"),
+			Direction: hcloud.FirewallRuleDirectionOut,
+			Protocol: hcloud.FirewallRuleProtocolTCP,
+			Port:     hcloud.Ptr("any"),
 			DestinationIPs: []net.IPNet{
 				{
-					IP:   net.IPv4zero,
-					Mask: net.IPv4Mask(0, 0, 0, 0),
+					IP:   net.ParseIP("0.0.0.0"),
+					Mask: net.CIDRMask(0, 32),
 				},
 				{
-					IP:   net.IPv6zero,
+					IP:   net.ParseIP("::"),
+					Mask: net.CIDRMask(0, 128),
+				},
+			},
+		},
+		{
+			Direction: hcloud.FirewallRuleDirectionOut,
+			Protocol: hcloud.FirewallRuleProtocolUDP,
+			Port:     hcloud.Ptr("any"),
+			DestinationIPs: []net.IPNet{
+				{
+					IP:   net.ParseIP("0.0.0.0"),
+					Mask: net.CIDRMask(0, 32),
+				},
+				{
+					IP:   net.ParseIP("::"),
+					Mask: net.CIDRMask(0, 128),
 				},
 			},
 		},
@@ -321,8 +354,8 @@ func getFirewallID(ctx context.Context, client *hcloud.Client) (int64, error) {
 
 	// firewall does not exist, create one.
 	firewall, _, createErr := client.Firewall.Create(ctx, hcloud.FirewallCreateOpts{
-		Name:         "harness-runner",
-		Rules:        rules,
+		Name:  "harness-runner",
+		Rules: rules,
 	})
 
 	if createErr != nil {
