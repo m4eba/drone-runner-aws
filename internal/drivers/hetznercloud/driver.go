@@ -49,7 +49,7 @@ func (p *config) CanHibernate() bool {
 func (p *config) Create(ctx context.Context, opts *types.InstanceCreateOpts) (instance *types.Instance, err error) {
 	startTime := time.Now()
 	logr := logger.FromContext(ctx).
-		WithField("driver", types.DigitalOcean).
+		WithField("driver", types.HetznerCloud).
 		WithField("pool", opts.PoolName).
 		// WithField("image", p.image).
 		WithField("hibernate", p.CanHibernate())
@@ -195,7 +195,7 @@ func (p *config) Destroy(ctx context.Context, instances []*types.Instance) (err 
 
 	logr := logger.FromContext(ctx).
 		WithField("id", instanceIDs).
-		WithField("driver", types.DigitalOcean)
+		WithField("driver", types.HetznerCloud)
 
 	client := hcloud.NewClient(hcloud.WithToken(p.token))
 	for _, instanceID := range instanceIDs {
