@@ -175,7 +175,6 @@ type (
 	// HetznerCloud specifies the configuration for a Hetzner Cloud instance.
 	HetznerCloud struct {
 		Account       HetznerCloudAccount `json:"account,omitempty"`
-		Region        string              `json:"region,omitempty" yaml:"region"`
 		Image         string              `json:"image,omitempty" yaml:"image,omitempty"`
 		Size          string              `json:"size,omitempty" yaml:"size,omitempty"`
 		FirewallID    int64               `json:"firewall_id,omitempty" yaml:"firewall_id,omitempty" default:"0"`
@@ -184,9 +183,10 @@ type (
 		UserData      string              `json:"user_data,omitempty" yaml:"user_data,omitempty"`
 		UserDataPath  string              `json:"user_data_Path,omitempty" yaml:"user_data_Path,omitempty"`
 	}
-
+	
 	HetznerCloudAccount struct {
-		Token    string `json:"token,omitempty" yaml:"token"`
+		Token    string              `json:"token,omitempty" yaml:"token"`
+		Region   string              `json:"region,omitempty" yaml:"region"`
 	}
 
 	// Google specifies the configuration for a GCP instance.

@@ -315,7 +315,7 @@ func ProcessPool(poolFile *config.PoolFile, runnerName string) ([]drivers.Pool, 
 			instance.Platform = *platform
 			driver, err := hetznercloud.New(
 				hetznercloud.WithToken(hetznerConfig.Account.Token),
-				hetznercloud.WithRegion(hetznerConfig.Region),
+				hetznercloud.WithRegion(hetznerConfig.Account.Region),
 				hetznercloud.WithImage(hetznerConfig.Image),
 				hetznercloud.WithSize(hetznerConfig.Size),
 				hetznercloud.WithFirewallID(hetznerConfig.FirewallID),
