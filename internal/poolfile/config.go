@@ -314,14 +314,17 @@ func ProcessPool(poolFile *config.PoolFile, runnerName string) ([]drivers.Pool, 
 			}
 			instance.Platform = *platform
 			driver, err := hetznercloud.New(
-				hetznercloud.WithToken(hetznerConfig.Account.Token),
-				hetznercloud.WithRegion(hetznerConfig.Account.Region),
+				hetznercloud.WithToken(hetznerConfig.Token),
+				hetznercloud.WithLocation(hetznerConfig.Location),
 				hetznercloud.WithImage(hetznerConfig.Image),
 				hetznercloud.WithSize(hetznerConfig.Size),
 				hetznercloud.WithFirewallID(hetznerConfig.FirewallID),
 				hetznercloud.WithTags(hetznerConfig.Tags),
 				hetznercloud.WithUserData(hetznerConfig.UserData, hetznerConfig.UserDataPath),
 				hetznercloud.WithRootDirectory(hetznerConfig.RootDirectory),
+				hetznercloud.WithDisablePublicNet(hetznerConfig.DisablePublicNet),
+				hetznercloud.WithDefaultGateway(hetznerConfig.DefaultGateway),
+				hetznercloud.WithNetwork(hetznerConfig.Network),
 			)
 			if err != nil {
 				return nil, fmt.Errorf("unable to create %s pool '%s': %v", instance.Type, instance.Name, err)
@@ -490,9 +493,7 @@ func createHetznerCloudPool(token string, minPoolSize, maxPoolSize int) *config.
 			OS:   oshelp.OSLinux,
 		},
 		Spec: &config.HetznerCloud{
-			Account: config.HetznerCloudAccount{
-				Token: token,
-			},
+			Token: token,
 		},
 	}
 	poolfile := config.PoolFile{

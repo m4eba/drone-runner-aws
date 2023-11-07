@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 
 	"strconv"
 	"time"
@@ -19,20 +20,25 @@ import (
 
 // config is a struct that implements drivers.Pool interface
 type config struct {
-	token      string
-	region     string
-	image      string
-	size       string
-	FirewallID int64
-	tags       []string
-	userData   string
-	rootDir    string
-	hibernate  bool
+	token            string
+	location         string
+	image            string
+	size             string
+	FirewallID       int64
+	tags             []string
+	userData         string
+	rootDir          string
+	hibernate        bool
+	disablePublicNet bool
+	defaultGateway   string
+	network          string
 }
 
 func New(opts ...Option) (drivers.Driver, error) {
 	p := new(config)
+	fmt.Println("opts %s", opts)
 	for _, opt := range opts {
+		fmt.Println("opt??? %s", p)
 		opt(p)
 	}
 	return p, nil
@@ -62,16 +68,66 @@ func (p *config) Create(ctx context.Context, opts *types.InstanceCreateOpts) (in
 		tags[tag] = ""
 	}
 
-	serverOpts := hcloud.ServerCreateOpts{
-		Name:       name,
-		Location:   &hcloud.Location{Name: p.region},
-		ServerType: &hcloud.ServerType{Name: p.size},
-		Image:      &hcloud.Image{Name: p.image},
-		UserData:   p.userData,
-		Labels:     tags,
+	logr.Infof("Token :%s: :%s:", p.network, p.token)
+	client := hcloud.NewClient(hcloud.WithToken(p.token))
+
+	network, _, err := client.Network.GetByName(ctx, p.network)
+	if err != nil {
+		logr.WithError(err).
+			Errorln("cannot get network")
+		return nil, err
 	}
 
-	client := hcloud.NewClient(hcloud.WithToken(p.token))
+	if network == nil && p.disablePublicNet {
+		logr.Error("hetznercloud: public net diasabled but not network found")
+	}
+
+	networks := []*hcloud.Network{}
+	if network != nil {
+		networks = append(networks, network)
+	}
+
+	userData := lehelper.GenerateUserdata(p.userData, opts)
+	/*if p.defaultGateway != "" {
+			userData = strings.Replace(userData, "runcmd:\n", `runcmd:
+	- route add default gw `+p.defaultGateway+`
+	- echo "DNS=8.8.8.8" >> /etc/systemd/resolved.conf
+	- systemctl restart systemd-resolved.service
+	`, 1)
+			logr.Debugf("user data %s", userData)
+		}*/
+	/*if p.defaultGateway != "" {
+			userData = strings.Replace(userData, "#cloud-config", `#cloud-config
+	bootcmd:
+	- route add default gw `+p.defaultGateway+`
+	- echo "DNS=8.8.8.8" >> /etc/systemd/resolved.conf
+	- systemctl restart systemd-resolved.service
+	`, 1)
+			logr.Debugf("user data %s", userData)
+		}*/
+	if p.defaultGateway != "" {
+		userData = strings.Replace(userData, "#cloud-config", `#cloud-config
+bootcmd:
+- echo "DNS=8.8.8.8" >> /etc/systemd/resolved.conf
+- 'echo "network:\n  version: 2\n  ethernets:\n    ens10:\n      routes:\n      - to: 0.0.0.0/0\n        via: `+p.defaultGateway+`" > /etc/netplan/51-netcfg.yaml'
+`, 1)
+		logr.Debugf("user data %s", userData)
+	}
+
+	serverOpts := hcloud.ServerCreateOpts{
+		Name:       name,
+		Location:   &hcloud.Location{Name: p.location},
+		ServerType: &hcloud.ServerType{Name: p.size},
+		Image:      &hcloud.Image{Name: p.image},
+		UserData:   userData,
+		Labels:     tags,
+		PublicNet: &hcloud.ServerCreatePublicNet{
+			EnableIPv4: !p.disablePublicNet,
+			EnableIPv6: !p.disablePublicNet,
+		},
+		Networks: networks,
+	}
+
 	serverCreate, _, err := client.Server.Create(ctx, serverOpts)
 	if err != nil {
 		logr.WithError(err).
@@ -90,35 +146,38 @@ func (p *config) Create(ctx context.Context, opts *types.InstanceCreateOpts) (in
 		}
 		p.FirewallID = id
 	}
-	firewall, _, err := client.Firewall.GetByID(ctx, p.FirewallID)
-	if err != nil || firewall == nil {
-		logr.WithError(err).
-			Errorln("could not get firewall")
-		return nil, err
-	}
-	// setup the firewall
-	_, _, firewallErr := client.Firewall.ApplyResources(ctx, firewall, []hcloud.FirewallResource{
-		{
-			Type: hcloud.FirewallResourceTypeServer,
-			Server: &hcloud.FirewallResourceServer{
-				ID: serverCreate.Server.ID,
+	if p.FirewallID > 0 {
+		firewall, _, err := client.Firewall.GetByID(ctx, p.FirewallID)
+		if err != nil || firewall == nil {
+			logr.WithError(err).
+				Errorln("could not get firewall")
+			return nil, err
+		}
+		// setup the firewall
+		_, _, firewallErr := client.Firewall.ApplyResources(ctx, firewall, []hcloud.FirewallResource{
+			{
+				Type: hcloud.FirewallResourceTypeServer,
+				Server: &hcloud.FirewallResourceServer{
+					ID: serverCreate.Server.ID,
+				},
 			},
-		},
-	})
-	if firewallErr != nil {
-		logr.WithError(firewallErr).
-			Errorln("cannot assign instance to firewall")
-		return nil, firewallErr
+		})
+		if firewallErr != nil {
+			logr.WithError(firewallErr).
+				Errorln("cannot assign instance to firewall")
+			return nil, firewallErr
+		}
+		logr.Infof("hetznercloud: firewall configured %s", name)
 	}
-	logr.Infof("hetznercloud: firewall configured %s", name)
 
 	// initialize the instance
 	instance = &types.Instance{
+		ID:           fmt.Sprint(serverCreate.Server.ID),
 		Name:         name,
 		Provider:     types.HetznerCloud, // this is driver, though its the old legacy name of provider
 		State:        types.StateCreated,
 		Pool:         opts.PoolName,
-		Region:       p.region,
+		Region:       p.location,
 		Image:        p.image,
 		Size:         p.size,
 		Platform:     opts.Platform,
@@ -148,19 +207,29 @@ poller:
 				Debugln("find instance network")
 
 			server, _, err := client.Server.GetByID(ctx, serverCreate.Server.ID)
+
 			if err != nil {
 				logr.WithError(err).
 					Errorln("cannot find instance")
 				return instance, err
 			}
-			instance.ID = fmt.Sprint(server.ID)
-			instance.Address = server.PublicNet.IPv4.IP.String()
+			logr.Debugf("instance %d %s", server.ID, instance.ID)
+			logr.Debugf("status %s", server.Status)
+			logr.Debugf("private network %s", server.PrivateNet)
+			if p.disablePublicNet && len(server.PrivateNet) > 0 {
+				instance.Address = server.PrivateNet[0].IP.String()
+			} else {
+				instance.Address = server.PublicNet.IPv4.IP.String()
+			}
+			logr.Debugf("instance address %s", instance.Address)
 
-			if instance.Address != "" {
+			if server.Status == hcloud.ServerStatusRunning {
 				break poller
 			}
+
 		}
 	}
+	logr.Debugf("server created %s", instance.Address)
 
 	return instance, err
 }
@@ -293,8 +362,8 @@ func getFirewallID(ctx context.Context, client *hcloud.Client) (int64, error) {
 	rules := []hcloud.FirewallRule{
 		{
 			Direction: hcloud.FirewallRuleDirectionIn,
-			Protocol: hcloud.FirewallRuleProtocolTCP,
-			Port:     hcloud.Ptr("9079"),
+			Protocol:  hcloud.FirewallRuleProtocolTCP,
+			Port:      hcloud.Ptr("9079"),
 			SourceIPs: []net.IPNet{
 				{
 					IP:   net.ParseIP("0.0.0.0"),
@@ -308,7 +377,7 @@ func getFirewallID(ctx context.Context, client *hcloud.Client) (int64, error) {
 		},
 		{
 			Direction: hcloud.FirewallRuleDirectionOut,
-			Protocol: hcloud.FirewallRuleProtocolICMP,
+			Protocol:  hcloud.FirewallRuleProtocolICMP,
 			DestinationIPs: []net.IPNet{
 				{
 					IP:   net.ParseIP("0.0.0.0"),
@@ -322,8 +391,8 @@ func getFirewallID(ctx context.Context, client *hcloud.Client) (int64, error) {
 		},
 		{
 			Direction: hcloud.FirewallRuleDirectionOut,
-			Protocol: hcloud.FirewallRuleProtocolTCP,
-			Port:     hcloud.Ptr("any"),
+			Protocol:  hcloud.FirewallRuleProtocolTCP,
+			Port:      hcloud.Ptr("any"),
 			DestinationIPs: []net.IPNet{
 				{
 					IP:   net.ParseIP("0.0.0.0"),
@@ -337,8 +406,8 @@ func getFirewallID(ctx context.Context, client *hcloud.Client) (int64, error) {
 		},
 		{
 			Direction: hcloud.FirewallRuleDirectionOut,
-			Protocol: hcloud.FirewallRuleProtocolUDP,
-			Port:     hcloud.Ptr("any"),
+			Protocol:  hcloud.FirewallRuleProtocolUDP,
+			Port:      hcloud.Ptr("any"),
 			DestinationIPs: []net.IPNet{
 				{
 					IP:   net.ParseIP("0.0.0.0"),

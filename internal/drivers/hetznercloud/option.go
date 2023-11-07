@@ -35,12 +35,12 @@ func WithToken(token string) Option {
 	}
 }
 
-func WithRegion(region string) Option {
+func WithLocation(location string) Option {
 	return func(p *config) {
-		if region == "" {
-			p.region = "nbg1"
+		if location == "" {
+			p.location = "nbg1"
 		} else {
-			p.region = region
+			p.location = location
 		}
 	}
 }
@@ -100,5 +100,23 @@ func WithUserData(text, path string) Option {
 func WithRootDirectory(dir string) Option {
 	return func(p *config) {
 		p.rootDir = oshelp.JoinPaths(oshelp.OSLinux, "/tmp", "hetznercloud")
+	}
+}
+
+func WithDisablePublicNet(disable bool) Option {
+	return func(p *config) {
+		p.disablePublicNet = disable
+	}
+}
+
+func WithDefaultGateway(gateway string) Option {
+	return func(p *config) {
+		p.defaultGateway = gateway
+	}
+}
+
+func WithNetwork(network string) Option {
+	return func(p *config) {
+		p.network = network
 	}
 }

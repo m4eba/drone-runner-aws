@@ -174,19 +174,18 @@ type (
 
 	// HetznerCloud specifies the configuration for a Hetzner Cloud instance.
 	HetznerCloud struct {
-		Account       HetznerCloudAccount `json:"account,omitempty"`
-		Image         string              `json:"image,omitempty" yaml:"image,omitempty"`
-		Size          string              `json:"size,omitempty" yaml:"size,omitempty"`
-		FirewallID    int64               `json:"firewall_id,omitempty" yaml:"firewall_id,omitempty" default:"0"`
-		Tags          []string            `json:"tags,omitempty" yaml:"tags,omitempty"`
-		RootDirectory string              `json:"root_directory,omitempty" yaml:"root_directory"`
-		UserData      string              `json:"user_data,omitempty" yaml:"user_data,omitempty"`
-		UserDataPath  string              `json:"user_data_Path,omitempty" yaml:"user_data_Path,omitempty"`
-	}
-
-	HetznerCloudAccount struct {
-		Token  string `json:"token,omitempty" yaml:"token"`
-		Region string `json:"region,omitempty" yaml:"region"`
+		Token            string   `json:"token,omitempty" yaml:"token"`
+		Location         string   `json:"location,omitempty" yaml:"location"`
+		Image            string   `json:"image,omitempty" yaml:"image,omitempty"`
+		Size             string   `json:"size,omitempty" yaml:"size,omitempty"`
+		FirewallID       int64    `json:"firewall_id,omitempty" yaml:"firewall_id,omitempty" default:"0"`
+		Tags             []string `json:"tags,omitempty" yaml:"tags,omitempty"`
+		RootDirectory    string   `json:"root_directory,omitempty" yaml:"root_directory"`
+		UserData         string   `json:"user_data,omitempty" yaml:"user_data,omitempty"`
+		UserDataPath     string   `json:"user_data_Path,omitempty" yaml:"user_data_Path,omitempty"`
+		DisablePublicNet bool     `json:"disable_public_net,omitempty" yaml:"disable_public_net,omitempty"`
+		DefaultGateway   string   `json:"default_gateway,omitempty" yaml:"default_gateawy,omitempty"`
+		Network          string   `json:"network,omitempty" yaml:"network,omitempty"`
 	}
 
 	// Google specifies the configuration for a GCP instance.
