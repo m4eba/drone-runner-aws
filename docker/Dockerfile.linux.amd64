@@ -6,6 +6,7 @@ RUN apk add -U --no-cache curl
 EXPOSE 3000
 
 ENV GODEBUG netdns=go
+ENV GODEBUG http2client=0
 ENV DRONE_PLATFORM_OS linux
 ENV DRONE_PLATFORM_ARCH amd64
 
