@@ -356,6 +356,7 @@ func mapPool(instance *config.Instance, runnerName string) (pool drivers.Pool) {
 		Name:       instance.Name,
 		MaxSize:    instance.Limit,
 		MinSize:    instance.Pool,
+		Strategy:   instance.Strategy,
 		Platform:   instance.Platform,
 	}
 	return pool

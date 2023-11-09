@@ -24,6 +24,7 @@ type (
 		Name     string         `json:"name"`
 		Default  bool           `json:"default"`
 		Type     string         `json:"type"`
+		Strategy string         `json:"strategy"`
 		Pool     int            `json:"pool"`
 		Limit    int            `json:"limit"`
 		Platform types.Platform `json:"platform,omitempty" yaml:"platform,omitempty"`

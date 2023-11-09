@@ -17,6 +17,8 @@ type Pool struct {
 	MaxSize int
 	MinSize int
 
+	Strategy string
+
 	Platform types.Platform
 
 	Driver Driver

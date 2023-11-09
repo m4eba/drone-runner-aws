@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -316,8 +317,11 @@ func (m *Manager) Provision(ctx context.Context, poolName, runnerName, serverNam
 		return nil, fmt.Errorf("provision: pool name %q not found", poolName)
 	}
 
-	strategy := m.strategy
-	if strategy == nil {
+	var strategy Strategy
+	if strings.ToLower(pool.Strategy) == "minmax" {
+		strategy = MinMax{}
+		fmt.Println("use minmax pool strat")
+	} else {
 		strategy = Greedy{}
 	}
 
@@ -485,14 +489,20 @@ func (m *Manager) buildPool(ctx context.Context, pool *poolEntry, tlsServerName 
 	}
 	instFree = append(instFree, instHibernating...)
 
-	strategy := m.strategy
-	if strategy == nil {
+	var strategy Strategy
+	sname := ""
+	if strings.ToLower(pool.Strategy) == "minmax" {
+		strategy = MinMax{}
+		sname = "MinMax"
+	} else {
 		strategy = Greedy{}
+		sname = "Greedy"
 	}
 
 	logr := logger.FromContext(ctx).
 		WithField("driver", pool.Driver.DriverName()).
-		WithField("pool", pool.Name)
+		WithField("pool", pool.Name).
+		WithField("strategy", sname)
 
 	shouldCreate, shouldRemove := strategy.CountCreateRemove(
 		pool.MinSize, pool.MaxSize,
