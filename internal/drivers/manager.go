@@ -320,7 +320,6 @@ func (m *Manager) Provision(ctx context.Context, poolName, runnerName, serverNam
 	var strategy Strategy
 	if strings.ToLower(pool.Strategy) == "minmax" {
 		strategy = MinMax{}
-		fmt.Println("use minmax pool strat")
 	} else {
 		strategy = Greedy{}
 	}
